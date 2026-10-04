@@ -131,7 +131,7 @@ def run_agent(question, history):
         if not message.tool_calls:
             history.append({"role": "user", "content": question})
             history.append({"role": "assistant", "content": message.content})
-            history[:] = history[-10:]
+            history[:] = history[-20:]
             return message.content
         
 
