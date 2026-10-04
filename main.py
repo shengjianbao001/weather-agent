@@ -1,3 +1,4 @@
+from ddgs import DDGS
 import os
 import json
 import requests
@@ -19,7 +20,7 @@ tools = [
         "type": "function",
         "function": {
             "name": "get_weather",
-            "description": "查询某个城市未来几天的天气。当用户询问天气、温度、是否带伞、穿什么等依赖天气的问题时使用。",
+            "description": "查询某个城市未来几天的天气。适合温度、降水、穿衣等普通天气问题。",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -29,6 +30,23 @@ tools = [
                     }
                 },
                 "required": ["city"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "搜索最新网络信息，用于天气预警、台风动态、航班延误等实时问题。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "需要搜索的完整问题"
+                    }
+                },
+                "required": ["query"]
             }
         }
     }
@@ -94,6 +112,10 @@ def get_weather(city):
         "daily": data["daily"]
     }
 
+def web_search(query):
+    """搜索最新网络信息"""
+    return DDGS().text(query, max_results=5)
+
 def run_agent(question, history):
     messages = [
     {
@@ -102,6 +124,8 @@ def run_agent(question, history):
             f"你是一个天气助手。今天是 {date.today().isoformat()}。"
             "结合之前的对话理解用户的省略和指代。"
             "需要天气信息时调用 get_weather 工具。"
+            "普通天气、温度、降水、穿衣问题优先使用 get_weather。"
+            "天气预警、台风动态、航班延误等实时信息使用 web_search。"
         )
     }
 ] + history + [
@@ -138,30 +162,27 @@ def run_agent(question, history):
         # 模型要求调用工具
         for tool_call in message.tool_calls:
 
+            arguments = json.loads(tool_call.function.arguments)
+
             if tool_call.function.name == "get_weather":
-
-                arguments = json.loads(
-                    tool_call.function.arguments
-                )
-
                 city = arguments["city"]
-
                 print(f"[Agent] 正在查询 {city} 的天气...")
+                result = get_weather(city)
 
-                weather_result = get_weather(city)
+            elif tool_call.function.name == "web_search":
+                query = arguments["query"]
+                print(f"[Agent] 正在搜索网络：{query}")
+                result = web_search(query)
 
-                # 把工具执行结果交还给模型
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": json.dumps(
-                            weather_result,
-                            ensure_ascii=False
-                        )
-                    }
-                )
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": json.dumps(result, ensure_ascii=False)
+                }
+            )
 
+            
     return "Agent 执行次数过多，请重新提问。"
 
 def ask_llm(question):
